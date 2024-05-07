@@ -67,6 +67,7 @@ yarn frontend start
 ```
 
 ## Algorithm
+![Flow](./assets/flow-a.png)
 
 The algorithm for the cross-chain bridge is as follows:
 
@@ -76,6 +77,7 @@ The algorithm for the cross-chain bridge is as follows:
 4. Users can then claim tokens after receiving the signature from the Federation.
 
 ## How it Works
+![Flow](./assets/flow-b.png)
 
 - **User Transfer**: Users initiate transfers to the token contract on the source chain.
 - **Bridge Monitoring**: The bridge monitors these transfers either automatically through a central server or manually via blockchain APIs.
