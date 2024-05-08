@@ -6,48 +6,44 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-contract SignatureVerification {
+contract Bridge {
     using ECDSA for bytes32;
     using Address for address;
     using MessageHashUtils for bytes32;
 
+    IERC20 public token;
     address public federationAddress;
-    address public operatorAddress;
+
+    mapping(bytes32 => bool) public claimedTransactions;
+
+    event Output(address indexed to, uint256 indexed amount);
+    event Input(address indexed from, uint256 indexed amount);
 
     constructor(address federationAddress_, address operatorAddress_) payable {
         federationAddress = federationAddress_;
-        operatorAddress = operatorAddress_;
     }
 
-    function depositToken(address tokenContract, uint256 amount)
-        external
-        payable
-        returns (bool)
-    {
-        require(msg.value == amount, "Wrong Amount");
-        IERC20(tokenContract).transferFrom(
-            operatorAddress,
-            address(this),
-            amount
-        );
+    function stringToUint(string memory s) public pure returns (uint) {
+        bytes memory b = bytes(s);
+        uint result = 0;
+        for (uint i = 0; i < b.length; i++) {
+            if (uint8(b[i]) >= 48 && uint8(b[i]) <= 57) {
+                result = result * 10 + (uint8(b[i]) - 48);
+            }
+        }
+        return result;
     }
 
-    function claimToken(bytes32 bridgePack, bytes memory signature) public {
-        require(
-            verifySignature(bridgePack, operatorAddress, signature),
-            "Failed claim token!"
-        );
-    }
-
-    function bridgePack(
+    function claimToken(
         string memory source_chainID,
         string memory source_contract,
         string memory target_contract,
         string memory symbol,
         string memory decimal,
         string memory amount,
-        string memory sign_at
-    ) public view returns (bytes32) {
+        string memory sign_at,
+        bytes memory signature
+    ) external returns (bytes32) {
         string memory target_chainID = Strings.toString(block.chainid);
         string memory user_bridge = Strings.toHexString(
             uint256(uint160(msg.sender)),
@@ -98,7 +94,21 @@ contract SignatureVerification {
             concatenatedBytes[index++] = sign_atBytes[i];
         }
 
-        return keccak256(abi.encodePacked(string(concatenatedBytes)));
+        bytes32 transaction = keccak256(abi.encodePacked(string(concatenatedBytes)));
+        require(
+            !claimedTransactions[transaction],
+            "Transaction already claimed!"
+        );
+        claimedTransactions[transaction] = true;
+
+        require(
+            verifySignature(transaction, federationAddress, signature),
+            "Failed claim token!"
+        );
+        
+        token = IERC20(address(bytes20(bytes(target_contract))));
+        emit Output(msg.sender, stringToUint(amount));
+        token.transfer(msg.sender, stringToUint(amount));
     }
 
     function verifySignature(
@@ -109,5 +119,9 @@ contract SignatureVerification {
         bytes32 hash = message.toEthSignedMessageHash();
         address recoveredSigner = hash.recover(signature);
         return signer == recoveredSigner;
+    }
+
+    receive() external payable {
+        emit Input(msg.sender, msg.value);
     }
 }
