@@ -19,7 +19,7 @@ contract Bridge {
     event Output(address indexed to, uint256 indexed amount);
     event Input(address indexed from, uint256 indexed amount);
 
-    constructor(address federationAddress_, address operatorAddress_) payable {
+    constructor(address federationAddress_) payable {
         federationAddress = federationAddress_;
     }
 
