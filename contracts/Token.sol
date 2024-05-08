@@ -1,78 +1,113 @@
-//SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.24;
 
-// Solidity files have to start with this pragma.
-// It will be used by the Solidity compiler to validate its version.
-pragma solidity ^0.8.9;
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-// We import this library to be able to use console.log
-import "hardhat/console.sol";
+contract SignatureVerification {
+    using ECDSA for bytes32;
+    using Address for address;
+    using MessageHashUtils for bytes32;
 
+    address public federationAddress;
+    address public operatorAddress;
 
-// This is the main building block for smart contracts.
-contract Token {
-    // Some string type variables to identify the token.
-    string public name = "My Hardhat Token";
-    string public symbol = "MHT";
-
-    // The fixed amount of tokens stored in an unsigned integer type variable.
-    uint256 public totalSupply = 1000000;
-
-    // An address type variable is used to store ethereum accounts.
-    address public owner;
-
-    // A mapping is a key/value map. Here we store each account balance.
-    mapping(address => uint256) balances;
-
-    // The Transfer event helps off-chain aplications understand
-    // what happens within your contract.
-    event Transfer(address indexed _from, address indexed _to, uint256 _value);
-
-    /**
-     * Contract initialization.
-     */
-    constructor() {
-        // The totalSupply is assigned to the transaction sender, which is the
-        // account that is deploying the contract.
-        balances[msg.sender] = totalSupply;
-        owner = msg.sender;
+    constructor(address federationAddress_, address operatorAddress_) payable {
+        federationAddress = federationAddress_;
+        operatorAddress = operatorAddress_;
     }
 
-    /**
-     * A function to transfer tokens.
-     *
-     * The `external` modifier makes a function *only* callable from outside
-     * the contract.
-     */
-    function transfer(address to, uint256 amount) external {
-        // Check if the transaction sender has enough tokens.
-        // If `require`'s first argument evaluates to `false` then the
-        // transaction will revert.
-        require(balances[msg.sender] >= amount, "Not enough tokens");
-
-        // We can print messages and values using console.log, a feature of
-        // Hardhat Network:
-        console.log(
-            "Transferring from %s to %s %s tokens",
-            msg.sender,
-            to,
+    function depositToken(address tokenContract, uint256 amount)
+        external
+        payable
+        returns (bool)
+    {
+        require(msg.value == amount, "Wrong Amount");
+        IERC20(tokenContract).transferFrom(
+            operatorAddress,
+            address(this),
             amount
         );
-
-        // Transfer the amount.
-        balances[msg.sender] -= amount;
-        balances[to] += amount;
-
-        // Notify off-chain applications of the transfer.
-        emit Transfer(msg.sender, to, amount);
     }
 
-    /**
-     * Read only function to retrieve the token balance of a given account.
-     *
-     * The `view` modifier indicates that it doesn't modify the contract's
-     * state, which allows us to call it without executing a transaction.
-     */
-    function balanceOf(address account) external view returns (uint256) {
-        return balances[account];
+    function claimToken(bytes32 bridgePack, bytes memory signature) public {
+        require(
+            verifySignature(bridgePack, operatorAddress, signature),
+            "Failed claim token!"
+        );
+    }
+
+    function bridgePack(
+        string memory source_chainID,
+        string memory source_contract,
+        string memory target_contract,
+        string memory symbol,
+        string memory decimal,
+        string memory amount,
+        string memory sign_at
+    ) public view returns (bytes32) {
+        string memory target_chainID = Strings.toString(block.chainid);
+        string memory user_bridge = Strings.toHexString(
+            uint256(uint160(msg.sender)),
+            20
+        );
+
+        bytes memory user_bridgeBytes = bytes(user_bridge);
+        bytes memory source_chainIDBytes = bytes(source_chainID);
+        bytes memory target_chainIDBytes = bytes(target_chainID);
+        bytes memory source_contractBytes = bytes(source_contract);
+        bytes memory target_contractBytes = bytes(target_contract);
+        bytes memory symbolBytes = bytes(symbol);
+        bytes memory decimalBytes = bytes(decimal);
+        bytes memory amountBytes = bytes(amount);
+        bytes memory sign_atBytes = bytes(sign_at);
+
+        string memory concatenatedString = new string(user_bridgeBytes.length + source_chainIDBytes.length + target_chainIDBytes.length + source_contractBytes.length + target_contractBytes.length + symbolBytes.length + decimalBytes.length + amountBytes.length + sign_atBytes.length
+        );
+
+        bytes memory concatenatedBytes = bytes(concatenatedString);
+
+        uint256 index = 0;
+        for (uint256 i = 0; i < user_bridgeBytes.length; i++) {
+            concatenatedBytes[index++] = user_bridgeBytes[i];
+        }
+        for (uint256 i = 0; i < source_chainIDBytes.length; i++) {
+            concatenatedBytes[index++] = source_chainIDBytes[i];
+        }
+        for (uint256 i = 0; i < target_chainIDBytes.length; i++) {
+            concatenatedBytes[index++] = target_chainIDBytes[i];
+        }
+        for (uint256 i = 0; i < source_contractBytes.length; i++) {
+            concatenatedBytes[index++] = source_contractBytes[i];
+        }
+        for (uint256 i = 0; i < target_contractBytes.length; i++) {
+            concatenatedBytes[index++] = target_contractBytes[i];
+        }
+        for (uint256 i = 0; i < symbolBytes.length; i++) {
+            concatenatedBytes[index++] = symbolBytes[i];
+        }
+        for (uint256 i = 0; i < decimalBytes.length; i++) {
+            concatenatedBytes[index++] = decimalBytes[i];
+        }
+        for (uint256 i = 0; i < amountBytes.length; i++) {
+            concatenatedBytes[index++] = amountBytes[i];
+        }
+        for (uint256 i = 0; i < sign_atBytes.length; i++) {
+            concatenatedBytes[index++] = sign_atBytes[i];
+        }
+
+        return keccak256(abi.encodePacked(string(concatenatedBytes)));
+    }
+
+    function verifySignature(
+        bytes32 message,
+        address signer,
+        bytes memory signature
+    ) public pure returns (bool) {
+        bytes32 hash = message.toEthSignedMessageHash();
+        address recoveredSigner = hash.recover(signature);
+        return signer == recoveredSigner;
     }
 }
