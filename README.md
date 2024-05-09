@@ -1,5 +1,5 @@
 # Cross-Chain Bridge Deployment Guide
-
+![Flow](./assets/interface.png)
 This guide provides steps for deploying the Cross-Chain Bridge application, including setting up the node, dashboard, federation server, and bridge front-end.
 
 ## Prerequisites
