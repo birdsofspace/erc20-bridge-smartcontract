@@ -45,8 +45,10 @@ contract Bridge {
 
     function checkRequest(address user_bridge, string memory request_at)
         external
-        view
-    {}
+        returns (uint256)
+    {
+        return _shares[user_bridge][request_at];
+    }
 
     function depositToken(
         string memory target_chainID,
