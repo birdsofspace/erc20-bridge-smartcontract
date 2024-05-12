@@ -1,7 +1,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
@@ -11,11 +11,11 @@ contract Bridge {
     using Address for address;
     using MessageHashUtils for bytes32;
 
-    IERC20 public token;
+    IERC20Upgradeable public token;
     address public federationAddress;
 
     mapping(bytes32 => bool) public claimedTransactions;
-    mapping(address => mapping(string => uint256)) public _shares;
+    mapping(address => mapping(uint256 => uint256)) public _shares;
 
     event Output(
         address indexed to,
@@ -25,7 +25,7 @@ contract Bridge {
     event Input(
         address indexed from,
         uint256 indexed amount,
-        string indexed request_at
+        uint256 indexed request_at
     );
 
     constructor(address federationAddress_) payable {
@@ -43,44 +43,46 @@ contract Bridge {
         return result;
     }
 
-    function checkRequest(address user_bridge, string memory request_at)
+    function checkRequest(address user_bridge, uint256 request_at)
         external
+        view
         returns (uint256)
     {
         return _shares[user_bridge][request_at];
     }
 
     function depositToken(
-        string memory target_chainID,
-        string memory source_contract,
-        string memory target_contract,
+        uint256 target_chainID,
+        address source_contract,
+        address target_contract,
         string memory symbol,
-        string memory decimal,
-        string memory amount,
-        string memory request_at
-    ) external virtual {
-        string memory source_chainID = Strings.toString(block.chainid);
-        string memory user_bridge = Strings.toHexString(
-            uint256(uint160(msg.sender)),
-            20
-        );
+        uint256 decimal,
+        uint256 amount,
+        uint256 request_at
+    ) external returns (bool success) {
+        address user_bridge = msg.sender;
 
-        uint256 balance = IERC20(address(bytes20(bytes(source_contract))))
-            .balanceOf(msg.sender);
-        require(balance >= stringToUint(amount), "low balance");
-        uint256 allowance = IERC20(address(bytes20(bytes(source_contract))))
-            .allowance(msg.sender, address(this));
-        require(allowance >= stringToUint(amount), "Check token allowance");
         require(
-            IERC20(address(bytes20(bytes(source_contract)))).transferFrom(
-                msg.sender,
+            IERC20Upgradeable(source_contract).balanceOf(user_bridge) >= amount,
+            "Low balance"
+        );
+        require(
+            IERC20Upgradeable(source_contract).allowance(user_bridge, address(this)) >=
+                amount,
+            "Check token allowance"
+        );
+        require(
+            IERC20Upgradeable(source_contract).transferFrom(
+                user_bridge,
                 address(this),
-                stringToUint(amount)
+                amount
             ),
             "Failed to send token to destination."
         );
-        _shares[msg.sender][request_at] = stringToUint(amount);
-        emit Input(msg.sender, stringToUint(amount), request_at);
+        _shares[user_bridge][request_at] = amount;
+        emit Input(user_bridge, amount, request_at);
+
+        return true;
     }
 
     function claimToken(
@@ -166,7 +168,7 @@ contract Bridge {
             "Failed claim token!"
         );
 
-        token = IERC20(address(bytes20(bytes(target_contract))));
+        token = IERC20Upgradeable(address(bytes20(bytes(target_contract))));
         emit Output(msg.sender, stringToUint(amount), sign_at);
         token.transfer(msg.sender, stringToUint(amount));
     }
