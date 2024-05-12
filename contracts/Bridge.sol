@@ -15,23 +15,70 @@ contract Bridge {
     address public federationAddress;
 
     mapping(bytes32 => bool) public claimedTransactions;
+    mapping(address => mapping(string => uint256)) public _shares;
 
-    event Output(address indexed to, uint256 indexed amount);
-    event Input(address indexed from, uint256 indexed amount);
+    event Output(
+        address indexed to,
+        uint256 indexed amount,
+        string indexed sign_at
+    );
+    event Input(
+        address indexed from,
+        uint256 indexed amount,
+        string indexed request_at
+    );
 
     constructor(address federationAddress_) payable {
         federationAddress = federationAddress_;
     }
 
-    function stringToUint(string memory s) public pure returns (uint) {
+    function stringToUint(string memory s) public pure returns (uint256) {
         bytes memory b = bytes(s);
-        uint result = 0;
-        for (uint i = 0; i < b.length; i++) {
+        uint256 result = 0;
+        for (uint256 i = 0; i < b.length; i++) {
             if (uint8(b[i]) >= 48 && uint8(b[i]) <= 57) {
                 result = result * 10 + (uint8(b[i]) - 48);
             }
         }
         return result;
+    }
+
+    function checkRequest(address user_bridge, string memory request_at)
+        external
+        view
+    {}
+
+    function depositToken(
+        string memory target_chainID,
+        string memory source_contract,
+        string memory target_contract,
+        string memory symbol,
+        string memory decimal,
+        string memory amount,
+        string memory request_at
+    ) external virtual {
+        string memory source_chainID = Strings.toString(block.chainid);
+        string memory user_bridge = Strings.toHexString(
+            uint256(uint160(msg.sender)),
+            20
+        );
+
+        uint256 balance = IERC20(address(bytes20(bytes(source_contract))))
+            .balanceOf(msg.sender);
+        require(balance >= stringToUint(amount), "low balance");
+        uint256 allowance = IERC20(address(bytes20(bytes(source_contract))))
+            .allowance(msg.sender, address(this));
+        require(allowance >= stringToUint(amount), "Check token allowance");
+        require(
+            IERC20(address(bytes20(bytes(source_contract)))).transferFrom(
+                msg.sender,
+                address(this),
+                stringToUint(amount)
+            ),
+            "Failed to send token to destination."
+        );
+        _shares[msg.sender][request_at] = stringToUint(amount);
+        emit Input(msg.sender, stringToUint(amount), request_at);
     }
 
     function claimToken(
@@ -60,7 +107,16 @@ contract Bridge {
         bytes memory amountBytes = bytes(amount);
         bytes memory sign_atBytes = bytes(sign_at);
 
-        string memory concatenatedString = new string(user_bridgeBytes.length + source_chainIDBytes.length + target_chainIDBytes.length + source_contractBytes.length + target_contractBytes.length + symbolBytes.length + decimalBytes.length + amountBytes.length + sign_atBytes.length
+        string memory concatenatedString = new string(
+            user_bridgeBytes.length +
+                source_chainIDBytes.length +
+                target_chainIDBytes.length +
+                source_contractBytes.length +
+                target_contractBytes.length +
+                symbolBytes.length +
+                decimalBytes.length +
+                amountBytes.length +
+                sign_atBytes.length
         );
 
         bytes memory concatenatedBytes = bytes(concatenatedString);
@@ -94,7 +150,9 @@ contract Bridge {
             concatenatedBytes[index++] = sign_atBytes[i];
         }
 
-        bytes32 transaction = keccak256(abi.encodePacked(string(concatenatedBytes)));
+        bytes32 transaction = keccak256(
+            abi.encodePacked(string(concatenatedBytes))
+        );
         require(
             !claimedTransactions[transaction],
             "Transaction already claimed!"
@@ -105,9 +163,9 @@ contract Bridge {
             verifySignature(transaction, federationAddress, signature),
             "Failed claim token!"
         );
-        
+
         token = IERC20(address(bytes20(bytes(target_contract))));
-        emit Output(msg.sender, stringToUint(amount));
+        emit Output(msg.sender, stringToUint(amount), sign_at);
         token.transfer(msg.sender, stringToUint(amount));
     }
 
@@ -121,7 +179,5 @@ contract Bridge {
         return signer == recoveredSigner;
     }
 
-    receive() external payable {
-        emit Input(msg.sender, msg.value);
-    }
+    receive() external payable {}
 }
