@@ -15,6 +15,7 @@ contract Bridge {
     address public federationAddress;
 
     mapping(bytes32 => bool) public claimedTransactions;
+    mapping(bytes => bool) public  usedSignatures;
     mapping(address => mapping(uint256 => uint256)) public _shares;
 
     event Output(
@@ -30,17 +31,6 @@ contract Bridge {
 
     constructor(address federationAddress_) payable {
         federationAddress = federationAddress_;
-    }
-
-    function stringToUint(string memory s) public pure returns (uint256) {
-        bytes memory b = bytes(s);
-        uint256 result = 0;
-        for (uint256 i = 0; i < b.length; i++) {
-            if (uint8(b[i]) >= 48 && uint8(b[i]) <= 57) {
-                result = result * 10 + (uint8(b[i]) - 48);
-            }
-        }
-        return result;
     }
 
     function checkRequest(address user_bridge, uint256 request_at)
@@ -94,7 +84,7 @@ contract Bridge {
         string memory amount,
         string memory sign_at,
         bytes memory signature
-    ) external returns (bytes32) {
+    ) external returns (bool) {
         string memory target_chainID = Strings.toString(block.chainid);
         string memory user_bridge = Strings.toHexString(
             uint256(uint160(msg.sender)),
@@ -154,23 +144,27 @@ contract Bridge {
             concatenatedBytes[index++] = sign_atBytes[i];
         }
 
-        bytes32 transaction = keccak256(
-            abi.encodePacked(string(concatenatedBytes))
+        bytes32 transaction = keccak256(abi.encodePacked(string(concatenatedBytes)));
+
+        require(
+            !usedSignatures[signature],
+            "Signature already used!"
         );
         require(
             !claimedTransactions[transaction],
             "Transaction already claimed!"
         );
-        claimedTransactions[transaction] = true;
-
         require(
             verifySignature(transaction, federationAddress, signature),
             "Failed claim token!"
         );
 
-        token = IERC20Upgradeable(address(bytes20(bytes(target_contract))));
+        token = IERC20Upgradeable(stringToAddress(target_contract));
         emit Output(msg.sender, stringToUint(amount), sign_at);
         token.transfer(msg.sender, stringToUint(amount));
+        claimedTransactions[transaction] = true;
+        usedSignatures[signature] = true;
+        return true;
     }
 
     function verifySignature(
@@ -184,4 +178,65 @@ contract Bridge {
     }
 
     receive() external payable {}
+
+
+    // Utils
+    function stringToUint(string memory _str) public pure returns(uint256 res) {
+    
+        for (uint256 i = 0; i < bytes(_str).length; i++) {
+            if ((uint8(bytes(_str)[i]) - 48) < 0 || (uint8(bytes(_str)[i]) - 48) > 9) {
+                return 0;
+            }
+            res += (uint8(bytes(_str)[i]) - 48) * 10**(bytes(_str).length - i - 1);
+        }
+        
+        return res;
+    }
+    
+    function stringToAddress(string memory _address) public pure returns (address) {
+        string memory cleanAddress = remove0xPrefix(_address);
+        bytes20 _addressBytes = parseHexStringToBytes20(cleanAddress);
+        return address(_addressBytes);
+    }
+
+    function remove0xPrefix(string memory _hexString) internal pure returns (string memory) {
+        if (bytes(_hexString).length >= 2 && bytes(_hexString)[0] == '0' && (bytes(_hexString)[1] == 'x' || bytes(_hexString)[1] == 'X')) {
+            return substring(_hexString, 2, bytes(_hexString).length);
+        }
+        return _hexString;
+    }
+
+    function substring(string memory _str, uint256 _start, uint256 _end) internal pure returns (string memory) {
+        bytes memory _strBytes = bytes(_str);
+        bytes memory _result = new bytes(_end - _start);
+        for (uint256 i = _start; i < _end; i++) {
+            _result[i - _start] = _strBytes[i];
+        }
+        return string(_result);
+    }
+
+    function parseHexStringToBytes20(string memory _hexString) internal pure returns (bytes20) {
+        bytes memory _bytesString = bytes(_hexString);
+        uint160 _parsedBytes = 0;
+        for (uint256 i = 0; i < _bytesString.length; i += 2) {
+            _parsedBytes *= 256;
+            uint8 _byteValue = parseByteToUint8(_bytesString[i]);
+            _byteValue *= 16;
+            _byteValue += parseByteToUint8(_bytesString[i + 1]);
+            _parsedBytes += _byteValue;
+        }
+        return bytes20(_parsedBytes);
+    }
+
+    function parseByteToUint8(bytes1 _byte) internal pure returns (uint8) {
+        if (uint8(_byte) >= 48 && uint8(_byte) <= 57) {
+            return uint8(_byte) - 48;
+        } else if (uint8(_byte) >= 65 && uint8(_byte) <= 70) {
+            return uint8(_byte) - 55;
+        } else if (uint8(_byte) >= 97 && uint8(_byte) <= 102) {
+            return uint8(_byte) - 87;
+        } else {
+            revert(string(abi.encodePacked("Invalid byte value: ", _byte)));
+        }
+    }
 }
