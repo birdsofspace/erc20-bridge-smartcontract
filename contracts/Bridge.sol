@@ -91,60 +91,9 @@ contract Bridge {
             20
         );
 
-        bytes memory user_bridgeBytes = bytes(user_bridge);
-        bytes memory source_chainIDBytes = bytes(source_chainID);
-        bytes memory target_chainIDBytes = bytes(target_chainID);
-        bytes memory source_contractBytes = bytes(source_contract);
-        bytes memory target_contractBytes = bytes(target_contract);
-        bytes memory symbolBytes = bytes(symbol);
-        bytes memory decimalBytes = bytes(decimal);
-        bytes memory amountBytes = bytes(amount);
-        bytes memory sign_atBytes = bytes(sign_at);
+        string memory dataPack = string.concat(user_bridge, source_chainID, target_chainID, source_contract, target_contract, symbol, decimal, amount, sign_at);
 
-        string memory concatenatedString = new string(
-            user_bridgeBytes.length +
-                source_chainIDBytes.length +
-                target_chainIDBytes.length +
-                source_contractBytes.length +
-                target_contractBytes.length +
-                symbolBytes.length +
-                decimalBytes.length +
-                amountBytes.length +
-                sign_atBytes.length
-        );
-
-        bytes memory concatenatedBytes = bytes(concatenatedString);
-
-        uint256 index = 0;
-        for (uint256 i = 0; i < user_bridgeBytes.length; i++) {
-            concatenatedBytes[index++] = user_bridgeBytes[i];
-        }
-        for (uint256 i = 0; i < source_chainIDBytes.length; i++) {
-            concatenatedBytes[index++] = source_chainIDBytes[i];
-        }
-        for (uint256 i = 0; i < target_chainIDBytes.length; i++) {
-            concatenatedBytes[index++] = target_chainIDBytes[i];
-        }
-        for (uint256 i = 0; i < source_contractBytes.length; i++) {
-            concatenatedBytes[index++] = source_contractBytes[i];
-        }
-        for (uint256 i = 0; i < target_contractBytes.length; i++) {
-            concatenatedBytes[index++] = target_contractBytes[i];
-        }
-        for (uint256 i = 0; i < symbolBytes.length; i++) {
-            concatenatedBytes[index++] = symbolBytes[i];
-        }
-        for (uint256 i = 0; i < decimalBytes.length; i++) {
-            concatenatedBytes[index++] = decimalBytes[i];
-        }
-        for (uint256 i = 0; i < amountBytes.length; i++) {
-            concatenatedBytes[index++] = amountBytes[i];
-        }
-        for (uint256 i = 0; i < sign_atBytes.length; i++) {
-            concatenatedBytes[index++] = sign_atBytes[i];
-        }
-
-        bytes32 transaction = keccak256(abi.encodePacked(string(concatenatedBytes)));
+        bytes32 transaction = keccak256(bytes(dataPack));
 
         require(
             !usedSignatures[signature],
