@@ -12,7 +12,6 @@ library StringsUtil {
         bytes memory bLower = new bytes(bStr.length);
         
         for (uint i = 0; i < bStr.length; i++) {
-            // Mengubah huruf besar (A-Z) menjadi huruf kecil (a-z)
             if ((bStr[i] >= 0x41) && (bStr[i] <= 0x5A)) {
                 bLower[i] = bytes1(uint8(bStr[i]) + 32);
             } else {
